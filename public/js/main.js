@@ -1,3 +1,4 @@
+var socket = io();
 //get list of users
 $.get('/get_chatters', function(response) {
     $('.chat-info').text("There are currently " + response.length + " people in the chat room");
