@@ -5,12 +5,8 @@ const bodyParser = require('body-parser');
 const app = express();
 const httpserver = new http.Server(app);
 const io = require('socket.io')(httpserver);
-
-const fs = require('fs');
-
 const redis = require('redis');
 
-let creds = '';
 const port = process.env.PORT || 8080;
 
 // Middleware to setup static folder
@@ -23,45 +19,43 @@ app.use(bodyParser.urlencoded({
 let chatters = [];
 
 // Stroing message
-let chat_messages = [];
+let chatMessages = [];
 
 // Read the credential from cred.json file
-fs.readFile('creds.json', (err, data) => {
-  if (err) {
-    throw err;
-  }
-  creds = JSON.parse(data);
-  const client = redis.createClient();
+const client = redis.createClient();
 
     // On client ready
-  client.once('ready', () => {
+client.once('ready', () => {
         // Get users
-    client.get('chat_users', (err, reply) => {
-      if (err) {
-        throw err;
-      }
-      if (reply) {
-        chatters = JSON.parse(reply);
-      }
-    });
+  client.get('chat_users', (err, reply) => {
+    if (err) {
+      throw err;
+    }
+    if (reply) {
+      chatters = JSON.parse(reply);
+    }
+  });
 
         // Getting messages
-    client.get('chat_app_messages', (err, reply) => {
-      if (err) {
-        throw err;
-      }
-      if (reply) {
-        chat_messages = JSON.parse(reply);
-      }
-    });
+  client.get('chat_app_messages', (err, reply) => {
+    if (err) {
+      throw err;
+    }
+    if (reply) {
+      chatMessages = JSON.parse(reply);
+    }
   });
 });
 
 /**
  * Routes Starts here
  */
-
-// join chat api
+app.get('/', (req, res) => {
+  res.sendFile('views/index.html', {
+    root: __dirname
+  });
+});
+// Join chat api
 app.post('/join', (req, res) => {
   const username = req.body.username;
 
@@ -83,7 +77,7 @@ app.post('/join', (req, res) => {
 });
 
 // Leave room api
-app.post('/leave', (err, res) => {
+app.post('/leave', (req, res) => {
   const username = req.body.username;
   chatters.splice(chatters.indexOf(username), 1);
 
@@ -98,13 +92,13 @@ app.post('/leave', (err, res) => {
 app.post('/send_message', (req, res) => {
   const username = req.body.username;
   const message = req.body.message;
-  chat_messages.push({
+  chatMessages.push({
     message,
     sender: username
   });
 
 	// Updating redis
-  client.set('chat_app_messages', JSON.stringify(chat_messages));
+  client.set('chat_app_messages', JSON.stringify(chatMessages));
   res.send({
     status: 'OK'
   });
@@ -112,27 +106,29 @@ app.post('/send_message', (req, res) => {
 
 // Get all messages
 app.get('/get_messages', (req, res) => {
-  res.send(chat_messages);
+  res.send(chatMessages);
+});
+
+// Get all users
+app.get('/get_chatters', (req, res) => {
+  res.send(chatters);
 });
 
 /**
  * Socket Starts here
  */
 
-io.on('connection', function(socket) {
-    //send message
-    socket.on('message', function(data) {
-        io.emit('send', data);
-    });
-    
-    //update users
-    socket.on('update_chatter_count', function(data) {
-        io.emit('count_chatters', data);
-    });
+io.on('connection', socket => {
+    // Send message
+  socket.on('message', data => {
+    io.emit('send', data);
+  });
+
+    // Update users
+  socket.on('update_chatter_count', data => {
+    io.emit('count_chatters', data);
+  });
 });
-
-
-
 
 // Start server
 httpserver.listen(port, () => {
